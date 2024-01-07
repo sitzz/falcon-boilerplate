@@ -1,3 +1,5 @@
+# pylint:disable=E0611
+
 import json
 import logging
 from typing import Union
@@ -11,9 +13,9 @@ from falcon_boilerplate.strfunc import proper_slash_it
 class BaseRouter:
     base_path = "/"
     version = None
-    app = None
+    app: App
 
-    def __init__(self, app: App, logger: logging.Logger = None):
+    def __init__(self, app: App, logger: Union[logging.Logger, None] = None):
         # Set app instance
         self.app = app
 

@@ -1,14 +1,15 @@
+# pylint:disable=E0611
+
 from datetime import datetime
 import enum
 import logging
 from typing import Any, Dict, List, Union
 from math import ceil
 
-from falcon import HTTPInternalServerError, HTTPBadRequest, HTTPMethodNotAllowed, HTTPNotFound
+from falcon.errors import HTTPInternalServerError, HTTPBadRequest, HTTPMethodNotAllowed, HTTPNotFound
 import falcon_sqla
-import pytz
 from sqlalchemy.inspection import inspect
-from sqlalchemy.orm import Query
+from sqlalchemy.orm import DeclarativeMeta, Query
 from sqlalchemy.orm.collections import InstrumentedList
 
 from falcon_boilerplate.strfunc import camel_case_to_snake_case, lower_camel_case_it
@@ -19,10 +20,10 @@ class Controller:
     r = False  # Controller has read access
     u = False  # Controller has update/write access
     d = False  # Controller has delete access
-    s = False  # Controller has soft-delete access
-    model = None
+    model: DeclarativeMeta
 
-    def __init__(self, sqla_manager: falcon_sqla.Manager, *, logger: logging.Logger = None, timezone: str = "Etc/UTC"):
+    def __init__(self, sqla_manager: falcon_sqla.Manager, *, logger: Union[logging.Logger, None] = None,
+                 timezone: str = "Etc/UTC"):
         # Add base instances and variables
         self.session = sqla_manager.session_scope
         self.timezone = timezone
@@ -39,6 +40,10 @@ class Controller:
         :return: bool
         :raises: HTTPInternalServerError
         """
+        if self.model is None:
+            self.logger.error(f"model not set for {self.__class__.__name__}")
+            raise HTTPInternalServerError(description="an internal errors occurred")
+
         if not self.supports("create"):
             raise HTTPMethodNotAllowed(allowed_methods=self.supported(), description="create action not supported")
 
@@ -67,6 +72,10 @@ class Controller:
         :return: Dict
         :raises: HTTPInternalServerError
         """
+        if self.model is None:
+            self.logger.error(f"model not set for {self.__class__.__name__}")
+            raise HTTPInternalServerError(description="an internal errors occurred")
+
         if not self.supports("read"):
             if self.logger is not None:
                 self.logger.debug(f"read not supported, only supports {self.supported()}")
@@ -75,7 +84,8 @@ class Controller:
 
         with self.session() as session:
             if hasattr(self.model, "deleted_at"):
-                row = session.query(self.model).filter(self.pk == pk, self.model.deleted_at == None).one_or_none()
+                row = session.query(self.model).filter(
+                    self.pk == pk, self.model.deleted_at == None).one_or_none()  # noqa: E711
             else:
                 row = session.get(self.model, pk)
             if not row:
@@ -96,6 +106,10 @@ class Controller:
         :param size: int
         :return: List[Dict]
         """
+        if self.model is None:
+            self.logger.error(f"model not set for {self.__class__.__name__}")
+            raise HTTPInternalServerError(description="an internal errors occurred")
+
         if not self.supports('read'):
             raise HTTPMethodNotAllowed(allowed_methods=self.supported(), description='read (list) action not supported')
 
@@ -103,7 +117,7 @@ class Controller:
         with self.session() as session:
             query = session.query(self.model)
             if hasattr(self.model, "deleted_at"):
-                query = query.filter(self.model.deleted_at == None)
+                query = query.filter(self.model.deleted_at == None)  # noqa: E711
             offset = (max(page - 1, 0)) * size
             rows = query.offset(offset).limit(size)
             for row in rows:
@@ -123,6 +137,10 @@ class Controller:
         :return: bool
         :raises: HTTPInternalServerError
         """
+        if self.model is None:
+            self.logger.error(f"model not set for {self.__class__.__name__}")
+            raise HTTPInternalServerError(description="an internal errors occurred")
+
         if not self.supports("update"):
             raise HTTPMethodNotAllowed(allowed_methods=self.supported(), description="update action not supported")
 
@@ -161,13 +179,16 @@ class Controller:
     def delete(self, pk: Union[int, str]) -> bool:
         """
         standard controller delete method, deletes a single record from primary key.
-        will prefer soft deleting if supported by controller.
         :param pk: int | str
         primary key of a record
         :return: bool
         :raises: HTTPInternalServerError
         """
-        if not self.supports("delete") and not self.supports("soft-delete"):
+        if self.model is None:
+            self.logger.error(f"model not set for {self.__class__.__name__}")
+            raise HTTPInternalServerError(description="an internal errors occurred")
+
+        if not self.supports("delete"):
             raise HTTPMethodNotAllowed(allowed_methods=self.supported(), description="delete action not supported")
 
         try:
@@ -177,11 +198,7 @@ class Controller:
                 if not row:
                     raise HTTPNotFound(description="item not found")
 
-                if self.supports("soft-delete"):
-                    row.deleted_at = datetime.now(tz=pytz.timezone(self.timezone))
-                else:
-                    session.delete(row)
-
+                session.delete(row)
                 session.commit()
 
             return True
@@ -260,7 +277,8 @@ class Controller:
 
         return ret
 
-    def pagination_details(self, query: Query = None, total: int = 0, page: int = 1, size: int = 1) -> dict:
+    def pagination_details(self, query: Union[Query, None] = None, total: int = 0, page: int = 1,
+                           size: int = 1) -> dict:
         """
         return pagination objects
         :param query: SQLAlchemy ORM query object
@@ -269,7 +287,7 @@ class Controller:
         :param size: int
         :return: dict
         """
-        ret = {}
+        ret: Dict[str, Any] = {}
 
         if query is None and total == 0:
             if self.logger is not None:

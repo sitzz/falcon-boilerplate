@@ -1,6 +1,8 @@
+# pylint:disable=E0611
+
 import json
 import logging
-from typing import Type, Union
+from typing import Union
 
 from falcon import App, HTTPInternalServerError, HTTPMethodNotAllowed, HTTPNotFound, Request, Response
 
@@ -9,13 +11,11 @@ from falcon_boilerplate.controller import Controller
 
 
 class ControllerRouter(BaseRouter):
-    def __init__(self, app: App, controller: Union[Controller, Type[Controller]], logger: logging.Logger = None):
+    def __init__(self, app: App, controller: Controller, logger: Union[logging.Logger, None] = None):
         super().__init__(app, logger)
 
         # Set controller for router
         self.controller = controller
-        if isinstance(self.controller, type):
-            self.controller = self.controller()
 
         # Add endpoints. Support should be handled in the individual controller
         self.add_route("/")
@@ -136,31 +136,6 @@ class ControllerRouter(BaseRouter):
         """
         try:
             if self.controller.delete(pk=pk):
-                res.status = 204
-                res.text = ""
-                return
-
-            raise HTTPInternalServerError(description="unable to delete record")
-        except (HTTPMethodNotAllowed, HTTPNotFound) as _err:
-            raise _err
-        except Exception as _err:
-            if isinstance(_err, HTTPInternalServerError):
-                raise _err
-
-            if self.logger is not None:
-                self.logger.error(f"unhandled exception on_get ({type(_err).__name__}): {_err}")
-        raise HTTPInternalServerError(description="unhandled exception in backend")
-
-    def on_delete_safe(self, req: Request, res: Response, pk: Union[int, str]):
-        """
-        safely delete a single record
-        :param req: Request
-        :param res: Response
-        :param pk: primary key of record
-        :return:
-        """
-        try:
-            if self.controller.safe_delete(pk=pk):
                 res.status = 204
                 res.text = ""
                 return
