@@ -18,9 +18,9 @@ class ControllerRouter(BaseRouter):
             self.controller = self.controller()
 
         # Add endpoints. Support should be handled in the individual controller
-        self.add_route('/')
-        self.add_route('/', suffix='list')
-        self.add_route('/{pk}')
+        self.add_route("/")
+        self.add_route("/", suffix="list")
+        self.add_route("/{pk}")
 
     def on_post(self, req: Request, res: Response):
         """
@@ -33,7 +33,7 @@ class ControllerRouter(BaseRouter):
             item = json.load(req.bounded_stream)
             if item and self.controller.create(item=item):
                 res.status = 201
-                res.text = '{}'
+                res.text = "{}"
                 return
 
             raise HTTPInternalServerError(description="unable to save record")
@@ -102,7 +102,7 @@ class ControllerRouter(BaseRouter):
             item = json.load(req.bounded_stream)
             if item and self.controller.update(pk=pk, item=item):
                 res.status = 204
-                res.text = ''
+                res.text = ""
                 return
 
             raise HTTPInternalServerError(description="unable to save record")
@@ -137,7 +137,7 @@ class ControllerRouter(BaseRouter):
         try:
             if self.controller.delete(pk=pk):
                 res.status = 204
-                res.text = ''
+                res.text = ""
                 return
 
             raise HTTPInternalServerError(description="unable to delete record")
@@ -162,7 +162,7 @@ class ControllerRouter(BaseRouter):
         try:
             if self.controller.safe_delete(pk=pk):
                 res.status = 204
-                res.text = ''
+                res.text = ""
                 return
 
             raise HTTPInternalServerError(description="unable to delete record")

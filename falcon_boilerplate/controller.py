@@ -39,14 +39,14 @@ class Controller:
         :return: bool
         :raises: HTTPInternalServerError
         """
-        if not self.supports('create'):
-            raise HTTPMethodNotAllowed(allowed_methods=self.supported(), description='create action not supported')
+        if not self.supports("create"):
+            raise HTTPMethodNotAllowed(allowed_methods=self.supported(), description="create action not supported")
 
-        if hasattr(self, 'required'):
+        if hasattr(self, "required"):
             for field in self.required:
                 if field not in item:
-                    raise HTTPBadRequest(description=f'missing one or more fields, body must contain '
-                                                     f'{" & ".join(", ".join(self.required).rsplit(", ", maxsplit=1))}')
+                    missing_fields = " & ".join(", ".join(self.required).rsplit(", ", maxsplit=1))
+                    raise HTTPBadRequest(description=f"missing one or more fields, body must contain {missing_fields}")
 
         try:
             with self.session() as session:
@@ -67,11 +67,11 @@ class Controller:
         :return: Dict
         :raises: HTTPInternalServerError
         """
-        if not self.supports('read'):
+        if not self.supports("read"):
             if self.logger is not None:
                 self.logger.debug(f"read not supported, only supports {self.supported()}")
             raise HTTPMethodNotAllowed(allowed_methods=self.supported(),
-                                       description='read (single) action not supported')
+                                       description="read (single) action not supported")
 
         with self.session() as session:
             if hasattr(self.model, "deleted_at"):
@@ -79,12 +79,12 @@ class Controller:
             else:
                 row = session.get(self.model, pk)
             if not row:
-                raise HTTPNotFound(description='item not found')
+                raise HTTPNotFound(description="item not found")
 
             session.expunge(row)
             row = self.to_dict(row)
 
-            if hasattr(self, 'filter'):
+            if hasattr(self, "filter"):
                 row = self.filter(row)
 
         return row
@@ -108,7 +108,7 @@ class Controller:
             rows = query.offset(offset).limit(size)
             for row in rows:
                 row = self.to_dict(row)
-                if hasattr(self, 'filter'):
+                if hasattr(self, "filter"):
                     row = self.filter(row)
                 ret.append(row)
 
@@ -123,15 +123,15 @@ class Controller:
         :return: bool
         :raises: HTTPInternalServerError
         """
-        if not self.supports('update'):
-            raise HTTPMethodNotAllowed(allowed_methods=self.supported(), description='update action not supported')
+        if not self.supports("update"):
+            raise HTTPMethodNotAllowed(allowed_methods=self.supported(), description="update action not supported")
 
         try:
             with self.session() as session:
                 row = session.get(self.model, pk)
 
                 if not row:
-                    raise HTTPNotFound(description='item not found')
+                    raise HTTPNotFound(description="item not found")
 
                 for k, v in item.items():
                     # We expect json formatted item names, we convert them to snake case
@@ -168,14 +168,14 @@ class Controller:
         :raises: HTTPInternalServerError
         """
         if not self.supports("delete") and not self.supports("soft-delete"):
-            raise HTTPMethodNotAllowed(allowed_methods=self.supported(), description='delete action not supported')
+            raise HTTPMethodNotAllowed(allowed_methods=self.supported(), description="delete action not supported")
 
         try:
             with self.session() as session:
                 row = session.get(self.model, pk)
 
                 if not row:
-                    raise HTTPNotFound(description='item not found')
+                    raise HTTPNotFound(description="item not found")
 
                 if self.supports("soft-delete"):
                     row.deleted_at = datetime.now(tz=pytz.timezone(self.timezone))
@@ -189,7 +189,6 @@ class Controller:
             if self.logger is not None:
                 self.logger.error(f"exception when delete item ({type(_err).__name__}): {_err}")
             raise HTTPInternalServerError(description="an unhandled error occurred when updating item")
-
 
     def supports(self, action) -> bool:
         """
@@ -206,8 +205,8 @@ class Controller:
         returns a list methods allowed by this controller
         :return:
         """
-        ret = ['HEAD', 'OPTIONS']
-        for action, method in {'create': 'POST', 'read': 'GET', 'update': 'PUT', 'delete': 'DELETE'}.items():
+        ret = ["HEAD", "OPTIONS"]
+        for action, method in {"create": "POST", "read": "GET", "update": "PUT", "delete": "DELETE"}.items():
             if self.supports(action):
                 ret.append(method)
 
@@ -256,7 +255,7 @@ class Controller:
             ret = self.sorted(ret)
         except Exception as _err:
             if self.logger is not None:
-                self.logger.error(f'controller.to_dict: unhandled exception ({type(_err).__name__}): {_err}')
+                self.logger.error(f"controller.to_dict: unhandled exception ({type(_err).__name__}): {_err}")
             ret = item
 
         return ret
@@ -274,7 +273,7 @@ class Controller:
 
         if query is None and total == 0:
             if self.logger is not None:
-                self.logger.debug('query is None and total == 0')
+                self.logger.debug("query is None and total == 0")
             return ret
 
         if query is not None and not isinstance(query, Query):
@@ -287,11 +286,11 @@ class Controller:
         next_ = page + 1 if page < pages else None
         previous = page - 1 if 1 < page <= pages else None
         ret = {
-            'size': size,
-            'total': total,
-            'pages': pages,
-            'next': next_,
-            'previous': previous
+            "size": size,
+            "total": total,
+            "pages": pages,
+            "next": next_,
+            "previous": previous
         }
 
         return ret

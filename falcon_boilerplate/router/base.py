@@ -9,7 +9,7 @@ from falcon_boilerplate.strfunc import proper_slash_it
 
 
 class BaseRouter:
-    base_path = '/'
+    base_path = "/"
     version = None
     app = None
 
@@ -35,7 +35,7 @@ class BaseRouter:
         :param kwargs: key word arguments for the falcon app 'add_route' method
             the options available are 'suffix' and 'compile'
         """
-        _version = f"v{self.version}" if self.version is not None else ''
+        _version = f"v{self.version}" if self.version is not None else ""
         _route_path = self._validate_path(f"{self.base_path}/{_version}/{path}")
         if self.logger is not None:
             self.logger.debug(f"adding route {_route_path}")

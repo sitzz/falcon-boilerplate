@@ -2,23 +2,23 @@ import re
 
 
 def untrailing_slash_it(string):
-    return string.rstrip('/')
+    return string.rstrip("/")
 
 
 def trailing_slash_it(string):
-    return untrailing_slash_it(string) + '/'
+    return untrailing_slash_it(string) + "/"
 
 
 def unleading_slash_it(string):
-    return string.lstrip('/')
+    return string.lstrip("/")
 
 
 def leading_slash_it(string):
-    return '/' + unleading_slash_it(string)
+    return "/" + unleading_slash_it(string)
 
 
 def unduplicate_slash_it(string):
-    return string.replace('//', '/')
+    return string.replace("//", "/")
 
 
 def proper_slash_it(string):
@@ -35,6 +35,6 @@ def lower_camel_case_it(string):
 
 
 def camel_case_to_snake_case(string):
-    string = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', string)
-    string = re.sub('([a-z0-9])([A-Z])', r'\1_\2', string).lower()
+    string = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", string)
+    string = re.sub("([a-z0-9])([A-Z])", r"\1_\2", string).lower()
     return string
