@@ -1,5 +1,5 @@
 from .base import BaseRouter
-from .standard import ControllerRouter
+from .controller import ControllerRouter
 
 __all__ = [
     'BaseRouter',
