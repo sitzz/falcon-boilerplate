@@ -18,9 +18,9 @@ class ControllerRouter(BaseRouter):
         self.controller = controller
 
         # Add endpoints. Support should be handled in the individual controller
-        self.add_route("/")
         self.add_route("/", suffix="list")
         self.add_route("/{pk}")
+        self.add_route("/")
 
     def on_post(self, req: Request, res: Response):
         """
