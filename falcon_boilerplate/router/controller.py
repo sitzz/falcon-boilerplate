@@ -18,7 +18,6 @@ class ControllerRouter(BaseRouter):
         self.controller = controller
 
         # Add endpoints. Support should be handled in the individual controller
-        self.add_route("/", suffix="list")
         self.add_route("/{pk}")
         self.add_route("/")
 
@@ -47,38 +46,21 @@ class ControllerRouter(BaseRouter):
                 self.logger.error(f"unhandled exception on_get ({type(_err).__name__}): {_err}")
         raise HTTPInternalServerError(description="unhandled exception in backend")
 
-    def on_get(self, req: Request, res: Response, pk: Union[int, str]):
+    def on_get(self, req: Request, res: Response, pk: Union[int, str, None] = None):
         """
         get a single record
         :param req: Request
         :param res: Response
-        :param pk: primary key of record
+        :param pk: optional primary key of record
         :return:
         """
         try:
-            record = self.controller.read(pk=pk)
-            res.text = json.dumps(record)
-            return
-        except (HTTPMethodNotAllowed, HTTPNotFound) as _err:
-            raise _err
-        except Exception as _err:
-            if isinstance(_err, HTTPInternalServerError):
-                raise _err
-
-            if self.logger is not None:
-                self.logger.error(f"unhandled exception on_get ({type(_err).__name__}): {_err}")
-        raise HTTPInternalServerError(description="unhandled exception in backend")
-
-    def on_get_list(self, req: Request, res: Response):
-        """
-        get a list of records
-        :param req: Request
-        :param res: Response
-        :return:
-        """
-        try:
-            records = self.controller.list()
-            res.text = json.dumps(records)
+            if pk is not None:
+                record = self.controller.read(pk=pk)
+                res.text = json.dumps(record)
+            else:
+                records = self.controller.list()
+                res.text = json.dumps(records)
             return
         except (HTTPMethodNotAllowed, HTTPNotFound) as _err:
             raise _err
