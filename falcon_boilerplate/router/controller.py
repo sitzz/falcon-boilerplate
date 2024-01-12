@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Union
 
-from falcon import App, HTTPInternalServerError, HTTPMethodNotAllowed, HTTPNotFound, Request, Response
+from falcon import App, HTTPBadRequest, HTTPInternalServerError, HTTPMethodNotAllowed, HTTPNotFound, Request, Response
 
 from falcon_boilerplate.router import BaseRouter
 from falcon_boilerplate.controller import Controller
@@ -36,7 +36,7 @@ class ControllerRouter(BaseRouter):
                 return
 
             raise HTTPInternalServerError(description="unable to save record")
-        except (HTTPMethodNotAllowed, HTTPNotFound) as _err:
+        except (HTTPBadRequest, HTTPMethodNotAllowed, HTTPNotFound) as _err:
             raise _err
         except Exception as _err:
             if isinstance(_err, HTTPInternalServerError):

@@ -47,16 +47,34 @@ class Controller:
         if not self.supports("create"):
             raise HTTPMethodNotAllowed(allowed_methods=self.supported(), description="create action not supported")
 
+        new_item = {}
+        for k, v in item.items():
+            k = camel_case_to_snake_case(k)
+
+            # Only set attributes that the model actually has
+            if not hasattr(self.model, k):
+                continue
+
+            # Don't allow setting certain columns, regardless
+            if k == self.pk.name:
+                continue
+
+            # Check if the model has defined what can be set
+            if hasattr(self.model, "__setable__") and k not in self.model.__setable__:
+                self.logger.info("no can do")
+                raise HTTPBadRequest(description=f"not allowed to set field {k}")
+
+            new_item[k] = v
+
         if hasattr(self, "required"):
             for field in self.required:
-                if field not in item:
+                if field not in new_item:
                     missing_fields = " & ".join(", ".join(self.required).rsplit(", ", maxsplit=1))
                     raise HTTPBadRequest(description=f"missing one or more fields, body must contain {missing_fields}")
 
         try:
             with self.session() as session:
-                user = self.model(**item)
-                session.add(user)
+                session.add(self.model(**new_item))
                 session.commit()
                 return True
         except Exception as _err:
@@ -159,10 +177,11 @@ class Controller:
                     if not hasattr(self.model, k):
                         continue
 
-                    # Don't allow updating certain columns, regardless
-                    if k == self.pk.name or k == "owner":
+                    # Don't allow updating certain columns
+                    if k == self.pk.name:
                         continue
 
+                    # Check if the model has defined what can be updated
                     if hasattr(self.model, "__editable__") and k not in self.model.__editable__:
                         continue
 
