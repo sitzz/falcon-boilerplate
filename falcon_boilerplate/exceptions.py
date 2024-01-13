@@ -1,0 +1,2 @@
+class SqlaManagerRequired(Exception):
+    pass

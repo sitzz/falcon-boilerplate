@@ -6,8 +6,8 @@ from typing import Union
 
 from falcon import App, HTTPBadRequest, HTTPInternalServerError, HTTPMethodNotAllowed, HTTPNotFound, Request, Response
 
+from falcon_boilerplate.protocols import Controller
 from falcon_boilerplate.router import BaseRouter
-from falcon_boilerplate.controller import Controller
 
 
 class ControllerRouter(BaseRouter):
@@ -56,10 +56,10 @@ class ControllerRouter(BaseRouter):
         """
         try:
             if pk is not None:
-                record = self.controller.read(pk=pk)
+                record = self.controller.read_single(pk=pk)
                 res.text = json.dumps(record)
             else:
-                records = self.controller.list()
+                records = self.controller.read_list()
                 res.text = json.dumps(records)
             return
         except (HTTPMethodNotAllowed, HTTPNotFound) as _err:

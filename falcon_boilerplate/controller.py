@@ -12,6 +12,8 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import DeclarativeMeta, Query
 from sqlalchemy.orm.collections import InstrumentedList
 
+from falcon_boilerplate import sqla_manager
+from falcon_boilerplate.exceptions import SqlaManagerRequired
 from falcon_boilerplate.strfunc import camel_case_to_snake_case, lower_camel_case_it
 
 
@@ -22,10 +24,16 @@ class Controller:
     d = False  # Controller has delete access
     model: DeclarativeMeta
 
-    def __init__(self, sqla_manager: falcon_sqla.Manager, *, logger: Union[logging.Logger, None] = None,
+    def __init__(self, *, manager: falcon_sqla.Manager = None, logger: Union[logging.Logger, None] = None,
                  timezone: str = "Etc/UTC"):
         # Add base instances and variables
-        self.session = sqla_manager.session_scope
+        if manager is None:
+            if sqla_manager.manager is None:
+                raise SqlaManagerRequired("no SQLAlchemy manager available")
+
+            manager = sqla_manager.manager
+
+        self.session = manager.session_scope
         self.timezone = timezone
         self.pk = inspect(self.model).primary_key[0]
 
@@ -45,7 +53,7 @@ class Controller:
             raise HTTPInternalServerError(description="an internal errors occurred")
 
         if not self.supports("create"):
-            raise HTTPMethodNotAllowed(allowed_methods=self.supported(), description="create action not supported")
+            raise HTTPMethodNotAllowed(allowed_methods=self.supported, description="create action not supported")
 
         new_item = {}
         for k, v in item.items():
@@ -61,7 +69,6 @@ class Controller:
 
             # Check if the model has defined what can be set
             if hasattr(self.model, "__setable__") and k not in self.model.__setable__:
-                self.logger.info("no can do")
                 raise HTTPBadRequest(description=f"not allowed to set field {k}")
 
             new_item[k] = v
@@ -82,7 +89,7 @@ class Controller:
                 self.logger.error(f"exception when creating item ({type(_err).__name__}): {_err}")
             raise HTTPInternalServerError(description="an unhandled error occurred when creating item")
 
-    def read(self, pk: Union[int, str]) -> Union[Dict[Any, Any], None]:
+    def read_single(self, pk: Union[int, str]) -> Union[Dict[Any, Any], None]:
         """
         standard controller read method, returns a single record from primary key
         :param pk: int | str
@@ -96,8 +103,8 @@ class Controller:
 
         if not self.supports("read"):
             if self.logger is not None:
-                self.logger.debug(f"read not supported, only supports {self.supported()}")
-            raise HTTPMethodNotAllowed(allowed_methods=self.supported(),
+                self.logger.debug(f"read not supported, only supports {self.supported}")
+            raise HTTPMethodNotAllowed(allowed_methods=self.supported,
                                        description="read (single) action not supported")
 
         with self.session() as session:
@@ -110,14 +117,14 @@ class Controller:
                 raise HTTPNotFound(description="item not found")
 
             session.expunge(row)
-            row = self.to_dict(row)
+            row = self._to_dict(row)
 
             if hasattr(self, "filter"):
                 row = self.filter(row)
 
         return row
 
-    def list(self, page: int = 1, size: int = 10) -> Union[List[Dict[Any, Any]], None]:
+    def read_list(self, page: int = 1, size: int = 10) -> Union[List[Dict[Any, Any]], None]:
         """
         standard controller read method, returns a list of records
         :param page: int
@@ -129,7 +136,7 @@ class Controller:
             raise HTTPInternalServerError(description="an internal errors occurred")
 
         if not self.supports('read'):
-            raise HTTPMethodNotAllowed(allowed_methods=self.supported(), description='read (list) action not supported')
+            raise HTTPMethodNotAllowed(allowed_methods=self.supported, description='read (list) action not supported')
 
         ret = []
         with self.session() as session:
@@ -139,7 +146,7 @@ class Controller:
             offset = (max(page - 1, 0)) * size
             rows = query.offset(offset).limit(size)
             for row in rows:
-                row = self.to_dict(row)
+                row = self._to_dict(row)
                 if hasattr(self, "filter"):
                     row = self.filter(row)
                 ret.append(row)
@@ -160,7 +167,7 @@ class Controller:
             raise HTTPInternalServerError(description="an internal errors occurred")
 
         if not self.supports("update"):
-            raise HTTPMethodNotAllowed(allowed_methods=self.supported(), description="update action not supported")
+            raise HTTPMethodNotAllowed(allowed_methods=self.supported, description="update action not supported")
 
         try:
             with self.session() as session:
@@ -208,7 +215,7 @@ class Controller:
             raise HTTPInternalServerError(description="an internal errors occurred")
 
         if not self.supports("delete"):
-            raise HTTPMethodNotAllowed(allowed_methods=self.supported(), description="delete action not supported")
+            raise HTTPMethodNotAllowed(allowed_methods=self.supported, description="delete action not supported")
 
         try:
             with self.session() as session:
@@ -226,78 +233,8 @@ class Controller:
                 self.logger.error(f"exception when delete item ({type(_err).__name__}): {_err}")
             raise HTTPInternalServerError(description="an unhandled error occurred when updating item")
 
-    def supports(self, action) -> bool:
-        """
-        method to determine controller abilities (create/write, read, update/write, delete)
-        :param action: str
-        one of create, read, update, delete
-
-        :return: bool
-        """
-        return getattr(self, action[:1].lower(), False)
-
-    def supported(self) -> List[str]:
-        """
-        returns a list methods allowed by this controller
-        :return:
-        """
-        ret = ["HEAD", "OPTIONS"]
-        for action, method in {"create": "POST", "read": "GET", "update": "PUT", "delete": "DELETE"}.items():
-            if self.supports(action):
-                ret.append(method)
-
-        return ret
-
-    @staticmethod
-    def sorted(item: dict) -> dict:
-        """
-        sort a dict by key
-        :param item: dict
-        :return: dict
-        """
-        return dict(sorted(item.items()))
-
-    def to_dict(self, item):
-        """
-        transform model object into a dict
-        :param item: model object
-        :return: dict
-        """
-        if isinstance(item, tuple):
-            item = item[0]
-
-        try:
-            ret = {}
-            for k in item.__table__.columns:
-                v = getattr(item, k.name)
-
-                if isinstance(v, InstrumentedList):
-                    ret[k] = []
-                    for item in v:
-                        ret[k].append(item.id)
-                    continue
-
-                if isinstance(v, enum.Enum):
-                    v = [
-                        v.value,
-                        v.name
-                    ]
-
-                if isinstance(v, datetime):
-                    v = v.isoformat()
-
-                key = lower_camel_case_it(k.name)
-                ret[key] = v
-            ret = self.sorted(ret)
-        except Exception as _err:
-            if self.logger is not None:
-                self.logger.error(f"controller.to_dict: unhandled exception ({type(_err).__name__}): {_err}")
-            ret = item
-
-        return ret
-
-    def pagination_details(self, query: Union[Query, None] = None, total: int = 0, page: int = 1,
-                           size: int = 1) -> dict:
+    def paginated_object(self, query: Union[Query, None] = None, total: int = 0, page: int = 1,
+                         size: int = 1) -> dict:
         """
         return pagination objects
         :param query: SQLAlchemy ORM query object
@@ -329,5 +266,76 @@ class Controller:
             "next": next_,
             "previous": previous
         }
+
+        return ret
+
+    def supports(self, action) -> bool:
+        """
+        method to determine controller abilities (create/write, read, update/write, delete)
+        :param action: str
+        one of create, read, update, delete
+
+        :return: bool
+        """
+        return getattr(self, action[:1].lower(), False)
+
+    @property
+    def supported(self) -> List[str]:
+        """
+        returns a list methods allowed by this controller
+        :return:
+        """
+        ret = ["HEAD", "OPTIONS"]
+        for action, method in {"create": "POST", "read": "GET", "update": "PUT", "delete": "DELETE"}.items():
+            if self.supports(action):
+                ret.append(method)
+
+        return ret
+
+    @staticmethod
+    def _sorted(item: dict) -> dict:
+        """
+        sort a dict by key
+        :param item: dict
+        :return: dict
+        """
+        return dict(sorted(item.items()))
+
+    def _to_dict(self, item):
+        """
+        transform model object into a dict
+        :param item: model object
+        :return: dict
+        """
+        if isinstance(item, tuple):
+            item = item[0]
+
+        try:
+            ret = {}
+            for k in item.__table__.columns:
+                v = getattr(item, k.name)
+
+                if isinstance(v, InstrumentedList):
+                    ret[k] = []
+                    for item in v:
+                        ret[k].append(item.id)
+                    continue
+
+                if isinstance(v, enum.Enum):
+                    v = [
+                        v.value,
+                        v.name
+                    ]
+
+                if isinstance(v, datetime):
+                    v = v.isoformat()
+
+                key = lower_camel_case_it(k.name)
+                ret[key] = v
+            ret = self._sorted(ret)
+        except Exception as _err:
+            if self.logger is not None:
+                self.logger.error(f"controller.to_dict: unhandled exception ({type(_err).__name__}): {_err}")
+            ret = item
 
         return ret
