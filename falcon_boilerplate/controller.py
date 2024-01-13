@@ -8,6 +8,7 @@ from math import ceil
 
 from falcon.errors import HTTPInternalServerError, HTTPBadRequest, HTTPMethodNotAllowed, HTTPNotFound
 import falcon_sqla
+from sqlalchemy.exc import StatementError
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import DeclarativeMeta, Query
 from sqlalchemy.orm.collections import InstrumentedList
@@ -108,19 +109,23 @@ class Controller:
                                        description="read (single) action not supported")
 
         with self.session() as session:
-            if hasattr(self.model, "deleted_at"):
-                row = session.query(self.model).filter(
-                    self.pk == pk, self.model.deleted_at == None).one_or_none()  # noqa: E711
-            else:
-                row = session.get(self.model, pk)
-            if not row:
+            try:
+                if hasattr(self.model, "deleted_at"):
+                    row = session.query(self.model).filter(
+                        self.pk == pk, self.model.deleted_at == None).one_or_none()  # noqa: E711
+                else:
+                    row = session.query(self.model).filter(self.pk == pk)  # noqa: E711
+
+                if not row:
+                    raise HTTPNotFound(description="item not found")
+
+                session.expunge(row)
+                row = self._to_dict(row)
+
+                if hasattr(self, "filter"):
+                    row = self.filter(row)
+            except StatementError:
                 raise HTTPNotFound(description="item not found")
-
-            session.expunge(row)
-            row = self._to_dict(row)
-
-            if hasattr(self, "filter"):
-                row = self.filter(row)
 
         return row
 
@@ -171,30 +176,33 @@ class Controller:
 
         try:
             with self.session() as session:
-                row = session.get(self.model, pk)
+                try:
+                    row = session.query(self.model).filter(self.pk == pk).one_or_none()  # noqa: E711
 
-                if not row:
+                    if not row:
+                        raise HTTPNotFound(description="item not found")
+
+                    for k, v in item.items():
+                        # We expect json formatted item names, we convert them to snake case
+                        k = camel_case_to_snake_case(k)
+
+                        # Only update attributes that the model actually has
+                        if not hasattr(self.model, k):
+                            continue
+
+                        # Don't allow updating certain columns
+                        if k == self.pk.name:
+                            continue
+
+                        # Check if the model has defined what can be updated
+                        if hasattr(self.model, "__editable__") and k not in self.model.__editable__:
+                            continue
+
+                        setattr(row, k, v)
+
+                    session.commit()
+                except StatementError:
                     raise HTTPNotFound(description="item not found")
-
-                for k, v in item.items():
-                    # We expect json formatted item names, we convert them to snake case
-                    k = camel_case_to_snake_case(k)
-
-                    # Only update attributes that the model actually has
-                    if not hasattr(self.model, k):
-                        continue
-
-                    # Don't allow updating certain columns
-                    if k == self.pk.name:
-                        continue
-
-                    # Check if the model has defined what can be updated
-                    if hasattr(self.model, "__editable__") and k not in self.model.__editable__:
-                        continue
-
-                    setattr(row, k, v)
-
-                session.commit()
 
             return True
         except Exception as _err:
@@ -219,13 +227,16 @@ class Controller:
 
         try:
             with self.session() as session:
-                row = session.get(self.model, pk)
+                try:
+                    row = session.query(self.model).filter(self.pk == pk).one_or_none()  # noqa: E711
 
-                if not row:
+                    if not row:
+                        raise HTTPNotFound(description="item not found")
+
+                    session.delete(row)
+                    session.commit()
+                except StatementError:
                     raise HTTPNotFound(description="item not found")
-
-                session.delete(row)
-                session.commit()
 
             return True
         except Exception as _err:

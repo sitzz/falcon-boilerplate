@@ -1,6 +1,6 @@
 import falcon_sqla
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 _sqla_manager: falcon_sqla.Manager = None
 
