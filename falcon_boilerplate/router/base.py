@@ -7,13 +7,14 @@ from typing import Union
 from falcon import App, HTTPBadRequest, HTTPInvalidHeader, HTTPMissingHeader, HTTPUnauthorized
 from falcon import status_codes
 
-from falcon_boilerplate.strfunc import proper_slash_it
+from falcon_boilerplate.strfunc import lower_camel_case_it, proper_slash_it
 
 
 class BaseRouter:
     base_path = "/"
     version = None
     app: App
+    camel_case_identifiers: bool = True
 
     def __init__(self, app: App, logger: Union[logging.Logger, None] = None):
         # Set app instance
@@ -43,14 +44,36 @@ class BaseRouter:
             self.logger.debug(f"adding route {_route_path}")
         self.app.add_route(_route_path, self, **kwargs)
 
-    @staticmethod
-    def json(body):
+    def json(self, body):
         """
         return json dumped string
         :param body: python object, dictionary, set or list. anything serializable by the json library
         :return: str
         """
+        if self.camel_case_identifiers:
+            if isinstance(body, list):
+                ret = []
+                for item in body:
+                    ret.append(self.camel_case(item))
+
+                body = ret
+            elif isinstance(body, dict):
+                body = self.camel_case(body)
+
         return json.dumps(body)
+
+    @staticmethod
+    def camel_case(item: dict) -> dict:
+        """
+        return dictionary with camel cased identifiers
+        :param item: dict
+        :return: dict
+        """
+        ret = {}
+        for k, v in item.items():
+            ret[lower_camel_case_it(k)] = v
+
+        return ret
 
     @staticmethod
     def _validate_path(path: str):

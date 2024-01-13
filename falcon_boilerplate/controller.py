@@ -15,7 +15,7 @@ from sqlalchemy.orm.collections import InstrumentedList
 
 from falcon_boilerplate import sqla_manager
 from falcon_boilerplate.exceptions import SqlaManagerRequired
-from falcon_boilerplate.strfunc import camel_case_to_snake_case, lower_camel_case_it
+from falcon_boilerplate.strfunc import camel_case_to_snake_case
 
 
 class Controller:
@@ -110,18 +110,17 @@ class Controller:
 
         with self.session() as session:
             try:
-                if hasattr(self.model, "deleted_at"):
-                    row = session.query(self.model).filter(
-                        self.pk == pk, self.model.deleted_at == None).one_or_none()  # noqa: E711
-                else:
-                    row = session.query(self.model).filter(self.pk == pk)  # noqa: E711
+                query = session.query(self.model)
+                if hasattr(self, "query_filter"):
+                    query = self.query_filter(query)
+
+                row = query.filter(self.pk == pk)  # noqa: E711
 
                 if not row:
                     raise HTTPNotFound(description="item not found")
 
                 session.expunge(row)
                 row = self._to_dict(row)
-
                 if hasattr(self, "filter"):
                     row = self.filter(row)
             except StatementError:
@@ -133,8 +132,10 @@ class Controller:
         """
         standard controller read method, returns a list of records
         :param page: int
+        the current page. 0 is assumed as being the first page
         :param size: int
-        :return: List[Dict]
+        the amount rows to return per page
+        :return: List[Dict[Any, Any] | None
         """
         if self.model is None:
             self.logger.error(f"model not set for {self.__class__.__name__}")
@@ -146,8 +147,9 @@ class Controller:
         ret = []
         with self.session() as session:
             query = session.query(self.model)
-            if hasattr(self.model, "deleted_at"):
-                query = query.filter(self.model.deleted_at == None)  # noqa: E711
+            if hasattr(self, "query_filter"):
+                query = self.query_filter(query)
+
             offset = (max(page - 1, 0)) * size
             rows = query.offset(offset).limit(size)
             for row in rows:
@@ -177,7 +179,10 @@ class Controller:
         try:
             with self.session() as session:
                 try:
-                    row = session.query(self.model).filter(self.pk == pk).one_or_none()  # noqa: E711
+                    query = session.query(self.model)
+                    if hasattr(self, "query_filter"):
+                        query = self.query_filter(query)
+                    row = query.filter(self.pk == pk).one_or_none()  # noqa: E711
 
                     if not row:
                         raise HTTPNotFound(description="item not found")
@@ -228,7 +233,10 @@ class Controller:
         try:
             with self.session() as session:
                 try:
-                    row = session.query(self.model).filter(self.pk == pk).one_or_none()  # noqa: E711
+                    query = session.query(self.model)
+                    if hasattr(self, "query_filter"):
+                        query = self.query_filter(query)
+                    row = query.filter(self.pk == pk).one_or_none()  # noqa: E711
 
                     if not row:
                         raise HTTPNotFound(description="item not found")
@@ -341,8 +349,7 @@ class Controller:
                 if isinstance(v, datetime):
                     v = v.isoformat()
 
-                key = lower_camel_case_it(k.name)
-                ret[key] = v
+                ret[k.name] = v
             ret = self._sorted(ret)
         except Exception as _err:
             if self.logger is not None:

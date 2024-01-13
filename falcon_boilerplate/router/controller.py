@@ -57,10 +57,10 @@ class ControllerRouter(BaseRouter):
         try:
             if pk is not None:
                 record = self.controller.read_single(pk=pk)
-                res.text = json.dumps(record)
+                res.text = self.json(record)
             else:
                 records = self.controller.read_list()
-                res.text = json.dumps(records)
+                res.text = self.json(records)
             return
         except (HTTPMethodNotAllowed, HTTPNotFound) as _err:
             raise _err
