@@ -110,21 +110,21 @@ class Controller:
 
         with self.session() as session:
             try:
-                query = session.query(self.model)
+                query = session.query(self.model).filter(self.pk == pk)  # noqa: E711
                 if hasattr(self, "query_filter"):
                     query = self.query_filter(query)
 
-                row = query.filter(self.pk == pk)  # noqa: E711
-
-                if not row:
-                    raise HTTPNotFound(description="item not found")
-
-                session.expunge(row)
-                row = self._to_dict(row)
-                if hasattr(self, "filter"):
-                    row = self.filter(row)
+                row = query.one_or_none()
             except StatementError:
                 raise HTTPNotFound(description="item not found")
+
+            if not row:
+                raise HTTPNotFound(description="item not found")
+
+            session.expunge(row)
+            row = self._to_dict(row)
+            if hasattr(self, "filter"):
+                row = self.filter(row)
 
         return row
 
@@ -183,33 +183,35 @@ class Controller:
                     if hasattr(self, "query_filter"):
                         query = self.query_filter(query)
                     row = query.filter(self.pk == pk).one_or_none()  # noqa: E711
-
-                    if not row:
-                        raise HTTPNotFound(description="item not found")
-
-                    for k, v in item.items():
-                        # We expect json formatted item names, we convert them to snake case
-                        k = camel_case_to_snake_case(k)
-
-                        # Only update attributes that the model actually has
-                        if not hasattr(self.model, k):
-                            continue
-
-                        # Don't allow updating certain columns
-                        if k == self.pk.name:
-                            continue
-
-                        # Check if the model has defined what can be updated
-                        if hasattr(self.model, "__editable__") and k not in self.model.__editable__:
-                            continue
-
-                        setattr(row, k, v)
-
-                    session.commit()
                 except StatementError:
                     raise HTTPNotFound(description="item not found")
 
+                if not row:
+                    raise HTTPNotFound(description="item not found")
+
+                for k, v in item.items():
+                    # We expect json formatted item names, we convert them to snake case
+                    k = camel_case_to_snake_case(k)
+
+                    # Only update attributes that the model actually has
+                    if not hasattr(self.model, k):
+                        continue
+
+                    # Don't allow updating certain columns
+                    if k == self.pk.name:
+                        continue
+
+                    # Check if the model has defined what can be updated
+                    if hasattr(self.model, "__editable__") and k not in self.model.__editable__:
+                        continue
+
+                    setattr(row, k, v)
+
+                session.commit()
+
             return True
+        except HTTPNotFound as _err:
+            raise _err
         except Exception as _err:
             if self.logger is not None:
                 self.logger.error(f"exception when updating item ({type(_err).__name__}): {_err}")
@@ -237,14 +239,14 @@ class Controller:
                     if hasattr(self, "query_filter"):
                         query = self.query_filter(query)
                     row = query.filter(self.pk == pk).one_or_none()  # noqa: E711
-
-                    if not row:
-                        raise HTTPNotFound(description="item not found")
-
-                    session.delete(row)
-                    session.commit()
                 except StatementError:
                     raise HTTPNotFound(description="item not found")
+
+                if not row:
+                    raise HTTPNotFound(description="item not found")
+
+                session.delete(row)
+                session.commit()
 
             return True
         except Exception as _err:
