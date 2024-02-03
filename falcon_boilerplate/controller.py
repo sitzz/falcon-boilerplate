@@ -13,7 +13,7 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import DeclarativeMeta, Query
 from sqlalchemy.orm.collections import InstrumentedList
 
-from falcon_boilerplate import sqla_manager
+from falcon_boilerplate.sqlaman import sqla_manager
 from falcon_boilerplate.exceptions import SqlaManagerRequired
 from falcon_boilerplate.strfunc import camel_case_to_snake_case
 
